@@ -1,0 +1,92 @@
+﻿@page "/fetchdata"
+
+<PageTitle>Weather forecast</PageTitle>
+
+@using BlazorExportToPDF.Data
+@using BlazorExportToPDF.Helpers;
+@using DevExpress.Blazor
+@using DevExpress.XtraPrinting;
+@using DevExpress.XtraReports.UI;
+@inject WeatherForecastService ForecastService
+@inject IJSRuntime jsRuntime
+
+<h1>Weather forecast</h1>
+
+<button class="btn btn-primary" @onclick="customExport_Execute" >
+    Export PDF
+</button>
+
+
+
+@if (Data == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <DxGrid Data="@Data" @ref="Grid">
+        <Columns>
+            <DxGridDataColumn FieldName="Date" DisplayFormat="D" />
+            <DxGridDataColumn FieldName="Forecast" />
+            <DxGridDataColumn FieldName="CloudCover" Width="120px" />
+            <DxGridDataColumn FieldName="TemperatureC" Caption="Temperature" Width="120px" />
+        </Columns>
+    </DxGrid>
+
+}
+
+@code {
+    List<WeatherForecast> Data { get; set; }
+    DxGrid Grid;
+
+    protected override void OnInitialized()
+    {
+        Data = ForecastService.GetForecast();
+    }
+
+    private void customExport_Execute()
+    {
+        IList<string> propertyNames = new List<string>();
+
+        foreach (DxGridDataColumn column in Grid.GetVisibleColumns())
+        {
+            if (!String.IsNullOrWhiteSpace(column.FieldName))
+            {
+                propertyNames.Add((column).FieldName);
+            }
+        }
+
+        string fields = String.Empty;
+        foreach (var detail in propertyNames)
+        {
+            fields += detail;
+            if (detail != propertyNames.Last()) { fields += ";"; }
+        }
+
+        XtraReport report = new XtraReport();
+        report.DataSource = Data;
+        ReportHelper.CreateReport(report, propertyNames.ToArray());
+        var reportName = Grid.Data.ToString();
+        report.Name = reportName + " Report.pdf";
+        report.CreateDocument();
+
+        //Export PDF Options
+        PdfExportOptions pdfOptions = report.ExportOptions.Pdf;
+        pdfOptions.PdfACompatibility = PdfACompatibility.PdfA3b;
+        pdfOptions.DocumentOptions.Application = "Test Application";
+        pdfOptions.DocumentOptions.Author = "DX Documentation Team";
+        pdfOptions.DocumentOptions.Keywords = "Xari, Reporting, PDF";
+        pdfOptions.DocumentOptions.Producer = Environment.UserName.ToString();
+        pdfOptions.DocumentOptions.Subject = "Document Subject";
+        pdfOptions.DocumentOptions.Title = "Document Title";
+
+        string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), report.Name);
+        report.ExportToPdf(path, pdfOptions);
+
+
+        if (!String.IsNullOrEmpty(path))
+        {
+            jsRuntime.InvokeVoidAsync("BlazorDownloadFile", report.Name, Convert.ToBase64String(File.ReadAllBytes(path)), ".pdf", "application/pdf");
+        }
+    }
+}
